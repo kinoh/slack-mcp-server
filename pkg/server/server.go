@@ -169,6 +169,37 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 		),
 	), channelsHandler.ChannelsHandler)
 
+	filesHandler := handler.NewFilesHandler(provider, logger)
+
+	s.AddTool(mcp.NewTool("search_files_and_canvases",
+		mcp.WithDescription("Search files (including canvases) using search.files with filters"),
+		mcp.WithTitleAnnotation("Search Files and Canvases"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithString("search_query",
+			mcp.Description("Search query to filter files. Example: 'design doc' or 'from:@alice'."),
+		),
+		mcp.WithString("filter_in_channel",
+			mcp.Description("Filter files in a specific channel by its ID or name. Example: 'C1234567890', 'G1234567890', or '#general'."),
+		),
+		mcp.WithString("filter_users_from",
+			mcp.Description("Filter files uploaded by a specific user by their ID or display name. Example: 'U1234567890' or '@username'."),
+		),
+		mcp.WithString("filter_date_before",
+			mcp.Description("Filter files created before a specific date in format 'YYYY-MM-DD'. Example: '2023-10-01' or 'July'."),
+		),
+		mcp.WithString("filter_date_after",
+			mcp.Description("Filter files created after a specific date in format 'YYYY-MM-DD'. Example: '2023-10-01' or 'July'."),
+		),
+		mcp.WithString("cursor",
+			mcp.DefaultString(""),
+			mcp.Description("Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request."),
+		),
+		mcp.WithNumber("limit",
+			mcp.DefaultNumber(20),
+			mcp.Description("The maximum number of items to return. Must be an integer between 1 and 100."),
+		),
+	), filesHandler.SearchFilesAndCanvasesHandler)
+
 	canvasesHandler := handler.NewCanvasesHandler(provider, logger)
 
 	s.AddTool(mcp.NewTool("canvases_create",

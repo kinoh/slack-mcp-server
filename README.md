@@ -84,14 +84,25 @@ Get list of channels
   - `limit` (number, default: 100): The maximum number of items to return. Must be an integer between 1 and 1000 (maximum 999).
   - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
 
-### 6. canvases_create:
+### 6. search_files_and_canvases:
+Search files (including canvases) using `search.files` with filters.
+- **Parameters:**
+  - `search_query` (string, optional): Search query to filter files. Example: `design doc` or `from:@alice`.
+  - `filter_in_channel` (string, optional): Filter files in a specific channel by its ID or name. Example: `C1234567890`, `G1234567890`, or `#general`.
+  - `filter_users_from` (string, optional): Filter files uploaded by a specific user by their ID or display name. Example: `U1234567890` or `@username`.
+  - `filter_date_before` (string, optional): Filter files created before a specific date in format `YYYY-MM-DD`. Example: `2023-10-01` or `July`.
+  - `filter_date_after` (string, optional): Filter files created after a specific date in format `YYYY-MM-DD`. Example: `2023-10-01` or `July`.
+  - `cursor` (string, default: ""): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
+  - `limit` (number, default: 20): The maximum number of items to return. Must be an integer between 1 and 100.
+
+### 7. canvases_create:
 Create a new canvas with markdown content
 - **Parameters:**
   - `title` (string, optional): Title of the canvas. If not provided, canvas will be created untitled.
   - `content` (string, required): Markdown content for the canvas. Supports headings, lists, code blocks, tables, links, mentions (@user, #channel), and emojis.
 - **Returns:** `canvas_id` that can be used for further operations
 
-### 7. canvases_edit:
+### 8. canvases_edit:
 Edit an existing canvas by adding, replacing, or deleting content
 - **Parameters:**
   - `canvas_id` (string, required): ID of the canvas to edit (e.g., F1234567890)
@@ -99,14 +110,14 @@ Edit an existing canvas by adding, replacing, or deleting content
   - `content` (string, required): Markdown content to add or use for replacement. Supports headings, lists, code blocks, tables, links, mentions, and emojis.
   - `section_id` (string, optional): Section ID for targeted operations (required for: `insert_before`, `insert_after`, `delete`). Use `canvases_sections_lookup` to find section IDs.
 
-### 8. canvases_sections_lookup:
+### 9. canvases_sections_lookup:
 Look up section IDs in a canvas for targeted edits
 - **Parameters:**
   - `canvas_id` (string, required): ID of the canvas to search for sections (e.g., F1234567890)
   - `contains_text` (string, optional): Filter sections by text content
 - **Returns:** Array of section objects with IDs that can be used with `canvases_edit`
 
-### 9. canvases_read:
+### 10. canvases_read:
 Read canvas metadata and full content
 - **Parameters:**
   - `canvas_id` (string, required): ID of the canvas to read (e.g., F1234567890)
