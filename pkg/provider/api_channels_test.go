@@ -101,3 +101,39 @@ func TestAllChanTypesConstant(t *testing.T) {
 	assert.Contains(t, AllChanTypes, "im")
 	assert.Contains(t, AllChanTypes, "mpim")
 }
+
+func TestConfiguredChannelTypes(t *testing.T) {
+	t.Run("returns all channel types by default", func(t *testing.T) {
+		t.Setenv("SLACK_MCP_SAFE_SEARCH", "")
+
+		assert.Equal(t, AllChanTypes, configuredChannelTypes(nil))
+		assert.Equal(t, []string{"public_channel", "im"}, configuredChannelTypes([]string{"public_channel", "im"}))
+	})
+
+	t.Run("restricts default cache to public channels when safe search is enabled", func(t *testing.T) {
+		t.Setenv("SLACK_MCP_SAFE_SEARCH", "true")
+
+		assert.Equal(t, []string{"public_channel"}, configuredChannelTypes(nil))
+	})
+
+	t.Run("filters non-public requests when safe search is enabled", func(t *testing.T) {
+		t.Setenv("SLACK_MCP_SAFE_SEARCH", "true")
+
+		assert.Equal(t, []string{"public_channel"}, configuredChannelTypes([]string{"public_channel", "private_channel", "im"}))
+		assert.Empty(t, configuredChannelTypes([]string{"private_channel", "im", "mpim"}))
+	})
+}
+
+func TestFilterChannelsByTypes(t *testing.T) {
+	channels := []Channel{
+		{ID: "C1", Name: "#general", IsPrivate: false, IsIM: false, IsMpIM: false},
+		{ID: "C2", Name: "#secret", IsPrivate: true, IsIM: false, IsMpIM: false},
+		{ID: "D1", Name: "@alice", IsPrivate: true, IsIM: true, IsMpIM: false},
+		{ID: "G1", Name: "mpdm-a-b-c", IsPrivate: true, IsIM: false, IsMpIM: true},
+	}
+
+	filtered := filterChannelsByTypes(channels, []string{"public_channel"})
+	if assert.Len(t, filtered, 1) {
+		assert.Equal(t, "C1", filtered[0].ID)
+	}
+}

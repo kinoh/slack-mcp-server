@@ -54,6 +54,60 @@ func getCacheDir() string {
 	return dir
 }
 
+func isSafeSearchEnabled() bool {
+	val := strings.ToLower(strings.TrimSpace(os.Getenv("SLACK_MCP_SAFE_SEARCH")))
+	return val == "true" || val == "1" || val == "yes"
+}
+
+func configuredChannelTypes(requested []string) []string {
+	if !isSafeSearchEnabled() {
+		if len(requested) == 0 {
+			return append([]string(nil), AllChanTypes...)
+		}
+		return append([]string(nil), requested...)
+	}
+
+	if len(requested) == 0 {
+		return []string{PubChanType}
+	}
+
+	filtered := make([]string, 0, len(requested))
+	for _, channelType := range requested {
+		if channelType == PubChanType {
+			filtered = append(filtered, channelType)
+		}
+	}
+	return filtered
+}
+
+func matchesChannelType(channel Channel, channelType string) bool {
+	switch {
+	case channelType == PubChanType:
+		return !channel.IsPrivate && !channel.IsIM && !channel.IsMpIM
+	case channelType == PrivateChanType:
+		return channel.IsPrivate && !channel.IsIM && !channel.IsMpIM
+	case channelType == "im":
+		return channel.IsIM
+	case channelType == "mpim":
+		return channel.IsMpIM
+	default:
+		return false
+	}
+}
+
+func filterChannelsByTypes(channels []Channel, channelTypes []string) []Channel {
+	filtered := make([]Channel, 0, len(channels))
+	for _, channel := range channels {
+		for _, channelType := range channelTypes {
+			if matchesChannelType(channel, channelType) {
+				filtered = append(filtered, channel)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
 // getCacheTTL returns the cache TTL from SLACK_MCP_CACHE_TTL env var or default (1 hour).
 // Supports formats: "1h", "30m", "3600" (seconds), "0" (disable TTL, cache forever)
 // Negative values are rejected and fall back to default.
@@ -961,6 +1015,8 @@ func (ap *ApiProvider) refreshChannelsInternal(ctx context.Context, force bool) 
 	ap.channelsMu.Lock()
 	defer ap.channelsMu.Unlock()
 
+	effectiveChannelTypes := configuredChannelTypes(nil)
+
 	// Check if we should use cache (not forced, cache exists, and within TTL)
 	if !force {
 		if data, err := os.ReadFile(ap.channelsCachePath); err == nil {
@@ -969,62 +1025,65 @@ func (ap *ApiProvider) refreshChannelsInternal(ctx context.Context, force bool) 
 				ap.logger.Warn("Failed to unmarshal channels cache, will refetch",
 					zap.String("cache_file", ap.channelsCachePath),
 					zap.Error(err))
-			} else if len(cachedChannels) == 0 {
-				ap.logger.Warn("Channels cache is empty or null, will refetch",
-					zap.String("cache_file", ap.channelsCachePath))
 			} else {
-				// Check cache TTL using file modification time
-				cacheValid := true
-				if ap.cacheTTL > 0 {
-					if fileInfo, err := os.Stat(ap.channelsCachePath); err == nil {
-						cacheAge := time.Since(fileInfo.ModTime())
-						if cacheAge > ap.cacheTTL {
-							ap.logger.Info("Channels cache expired, will refetch",
-								zap.Duration("cache_age", cacheAge),
-								zap.Duration("ttl", ap.cacheTTL),
-								zap.String("cache_file", ap.channelsCachePath))
-							cacheValid = false
-						}
-					}
-				}
-
-				if cacheValid {
-					// Re-map channels with current users cache to ensure DM names are populated
-					usersMap := ap.ProvideUsersMap().Users
-					newSnapshot := &ChannelsCache{
-						Channels:    make(map[string]Channel, len(cachedChannels)),
-						ChannelsInv: make(map[string]string, len(cachedChannels)),
-					}
-					for _, c := range cachedChannels {
-						// For IM channels, re-generate the name and purpose using current users cache
-						if c.IsIM {
-							// Re-map the channel to get updated user name if available
-							remappedChannel := mapChannel(
-								c.ID, "", "", c.Topic, c.Purpose,
-								c.User, c.Members, c.MemberCount,
-								c.IsIM, c.IsMpIM, c.IsPrivate, c.IsExtShared,
-								usersMap,
-							)
-							newSnapshot.Channels[c.ID] = remappedChannel
-							newSnapshot.ChannelsInv[remappedChannel.Name] = c.ID
-						} else {
-							newSnapshot.Channels[c.ID] = c
-							newSnapshot.ChannelsInv[c.Name] = c.ID
-						}
-					}
-					ap.channelsSnapshot.Store(newSnapshot)
-					ap.logger.Info("Loaded channels from cache and re-mapped DM names",
-						zap.Int("count", len(cachedChannels)),
+				cachedChannels = filterChannelsByTypes(cachedChannels, effectiveChannelTypes)
+				if len(cachedChannels) == 0 {
+					ap.logger.Warn("Channels cache is empty or null, will refetch",
 						zap.String("cache_file", ap.channelsCachePath))
-					ap.channelsReady = true
-					return nil
+				} else {
+					// Check cache TTL using file modification time
+					cacheValid := true
+					if ap.cacheTTL > 0 {
+						if fileInfo, err := os.Stat(ap.channelsCachePath); err == nil {
+							cacheAge := time.Since(fileInfo.ModTime())
+							if cacheAge > ap.cacheTTL {
+								ap.logger.Info("Channels cache expired, will refetch",
+									zap.Duration("cache_age", cacheAge),
+									zap.Duration("ttl", ap.cacheTTL),
+									zap.String("cache_file", ap.channelsCachePath))
+								cacheValid = false
+							}
+						}
+					}
+
+					if cacheValid {
+						// Re-map channels with current users cache to ensure DM names are populated
+						usersMap := ap.ProvideUsersMap().Users
+						newSnapshot := &ChannelsCache{
+							Channels:    make(map[string]Channel, len(cachedChannels)),
+							ChannelsInv: make(map[string]string, len(cachedChannels)),
+						}
+						for _, c := range cachedChannels {
+							// For IM channels, re-generate the name and purpose using current users cache
+							if c.IsIM {
+								// Re-map the channel to get updated user name if available
+								remappedChannel := mapChannel(
+									c.ID, "", "", c.Topic, c.Purpose,
+									c.User, c.Members, c.MemberCount,
+									c.IsIM, c.IsMpIM, c.IsPrivate, c.IsExtShared,
+									usersMap,
+								)
+								newSnapshot.Channels[c.ID] = remappedChannel
+								newSnapshot.ChannelsInv[remappedChannel.Name] = c.ID
+							} else {
+								newSnapshot.Channels[c.ID] = c
+								newSnapshot.ChannelsInv[c.Name] = c.ID
+							}
+						}
+						ap.channelsSnapshot.Store(newSnapshot)
+						ap.logger.Info("Loaded channels from cache and re-mapped DM names",
+							zap.Int("count", len(cachedChannels)),
+							zap.String("cache_file", ap.channelsCachePath))
+						ap.channelsReady = true
+						return nil
+					}
 				}
 			}
 		}
 	}
 
 	// Fetch fresh data from Slack API
-	channels := ap.GetChannels(ctx, AllChanTypes)
+	channels := ap.GetChannels(ctx, effectiveChannelTypes)
 
 	if len(channels) == 0 {
 		ap.logger.Warn("No channels fetched from Slack API, not writing empty cache",
@@ -1148,15 +1207,16 @@ func (ap *ApiProvider) getChannelsMultiType(ctx context.Context, channelTypes []
 }
 
 func (ap *ApiProvider) GetChannels(ctx context.Context, channelTypes []string) []Channel {
-	if len(channelTypes) == 0 {
-		channelTypes = AllChanTypes
+	effectiveChannelTypes := configuredChannelTypes(channelTypes)
+	if len(effectiveChannelTypes) == 0 {
+		return nil
 	}
 
 	// Fetch all channel types in a single paginated call. The standard
 	// conversations.list API supports multiple types per request, and the edge
 	// API (Enterprise Grid + non-OAuth) returns all types regardless. This
 	// avoids making 4 separate API round-trips (one per type).
-	chans := ap.getChannelsMultiType(ctx, AllChanTypes)
+	chans := ap.getChannelsMultiType(ctx, effectiveChannelTypes)
 
 	// Build new snapshot with all fetched channels
 	newSnapshot := &ChannelsCache{
@@ -1171,18 +1231,9 @@ func (ap *ApiProvider) GetChannels(ctx context.Context, channelTypes []string) [
 
 	// Filter by requested channel types
 	var res []Channel
-	for _, t := range channelTypes {
+	for _, t := range effectiveChannelTypes {
 		for _, channel := range newSnapshot.Channels {
-			if t == "public_channel" && !channel.IsPrivate && !channel.IsIM && !channel.IsMpIM {
-				res = append(res, channel)
-			}
-			if t == "private_channel" && channel.IsPrivate && !channel.IsIM && !channel.IsMpIM {
-				res = append(res, channel)
-			}
-			if t == "im" && channel.IsIM {
-				res = append(res, channel)
-			}
-			if t == "mpim" && channel.IsMpIM {
+			if matchesChannelType(channel, t) {
 				res = append(res, channel)
 			}
 		}
