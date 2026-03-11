@@ -114,11 +114,12 @@ Edit an existing canvas by adding, replacing, or deleting content
   - `section_id` (string, optional): Section ID for targeted operations (required for: `insert_before`, `insert_after`, `delete`). Use `canvases_sections_lookup` to find section IDs.
 
 ### 9. canvases_sections_lookup:
-Look up section IDs in a canvas for targeted edits
+Find canvas sections to use as anchors for targeted edits. Use this before `canvases_edit` when you need a `section_id` for `insert_before`, `insert_after`, or `delete`.
 - **Parameters:**
-  - `canvas_id` (string, required): ID of the canvas to search for sections (e.g., F1234567890)
-  - `contains_text` (string, optional): Filter sections by text content
+  - `canvas_id` (string, required): ID of the canvas to inspect (e.g., `F1234567890`)
+  - `contains_text` (string, optional): Optional text to match inside section content. Use a short unique phrase from the canvas, such as a heading or sentence fragment, to find the right section.
 - **Returns:** Array of section objects with IDs that can be used with `canvases_edit`
+- **Typical flow:** Read the canvas, identify a heading or phrase near the place you want to edit, look up the matching section with `contains_text`, then pass the returned `section_id` to `canvases_edit`.
 
 ### 10. canvases_read:
 Read canvas metadata and full content

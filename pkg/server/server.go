@@ -534,13 +534,13 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 	), canvasesHandler.CanvasesEditHandler)
 
 	s.AddTool(mcp.NewTool("canvases_sections_lookup",
-		mcp.WithDescription("Look up section IDs in a canvas for targeted edits"),
+		mcp.WithDescription("Find canvas sections to use as anchors for targeted edits. Use this before canvases_edit when you need a section_id for insert_before, insert_after, or delete."),
 		mcp.WithString("canvas_id",
 			mcp.Required(),
-			mcp.Description("ID of the canvas to search for sections (e.g., F1234567890)"),
+			mcp.Description("ID of the canvas to inspect (e.g., F1234567890)."),
 		),
 		mcp.WithString("contains_text",
-			mcp.Description("Filter sections by text content (optional)"),
+			mcp.Description("Optional text to match inside section content. Use a short unique phrase from the canvas, such as a heading or sentence fragment, to find the right section."),
 		),
 	), canvasesHandler.CanvasesSectionsLookupHandler)
 
