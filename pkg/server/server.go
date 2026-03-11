@@ -172,7 +172,7 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 	filesHandler := handler.NewFilesHandler(provider, logger)
 
 	s.AddTool(mcp.NewTool("search_files_and_canvases",
-		mcp.WithDescription("Search files (including canvases) using search.files with filters"),
+		mcp.WithDescription("Search files, canvases, and Slack Lists using search.files with filters. Use a returned List file ID (F...) as list_id for lists_items_* tools."),
 		mcp.WithTitleAnnotation("Search Files and Canvases"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithString("search_query",
@@ -250,6 +250,66 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 			mcp.Description("ID of the canvas to read (e.g., F1234567890)"),
 		),
 	), canvasesHandler.CanvasesReadHandler)
+
+	if provider.IsOAuthToken() {
+		listsHandler := handler.NewListsHandler(provider, logger)
+
+		s.AddTool(mcp.NewTool("lists_items_list",
+			mcp.WithDescription("List items in a Slack List using the official Lists API. Returns list metadata together with items."),
+			mcp.WithTitleAnnotation("List Slack List Items"),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithString("list_id",
+				mcp.Required(),
+				mcp.Description("Slack List file ID (F...) or a Slack List URL."),
+			),
+			mcp.WithNumber("limit",
+				mcp.DefaultNumber(50),
+				mcp.Description("The maximum number of items to return. Must be an integer between 1 and 100."),
+			),
+			mcp.WithString("cursor",
+				mcp.Description("Cursor returned as next_cursor from a previous lists_items_list call."),
+			),
+			mcp.WithBoolean("include_archived",
+				mcp.DefaultBool(false),
+				mcp.Description("If true, archived items are included."),
+			),
+		), listsHandler.ListsItemsListHandler)
+
+		s.AddTool(mcp.NewTool("lists_items_create",
+			mcp.WithDescription("Create a Slack List item using the official Lists API."),
+			mcp.WithTitleAnnotation("Create Slack List Item"),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("list_id",
+				mcp.Required(),
+				mcp.Description("Slack List file ID (F...) or a Slack List URL."),
+			),
+			mcp.WithString("field_values",
+				mcp.Required(),
+				mcp.Description("JSON object of field values keyed by field ID, field key, or field name."),
+			),
+			mcp.WithString("parent_item_id",
+				mcp.Description("Optional parent item ID when creating a sub-item."),
+			),
+		), listsHandler.ListsItemsCreateHandler)
+
+		s.AddTool(mcp.NewTool("lists_items_update",
+			mcp.WithDescription("Update a Slack List item using the official Lists API."),
+			mcp.WithTitleAnnotation("Update Slack List Item"),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithString("list_id",
+				mcp.Required(),
+				mcp.Description("Slack List file ID (F...) or a Slack List URL."),
+			),
+			mcp.WithString("item_id",
+				mcp.Required(),
+				mcp.Description("Slack List item ID."),
+			),
+			mcp.WithString("field_values",
+				mcp.Required(),
+				mcp.Description("JSON object of field values keyed by field ID, field key, or field name."),
+			),
+		), listsHandler.ListsItemsUpdateHandler)
+	}
 
 	logger.Info("Authenticating with Slack API...",
 		zap.String("context", "console"),

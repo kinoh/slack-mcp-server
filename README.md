@@ -14,6 +14,7 @@ This feature-rich Slack MCP Server has:
 - **Channel and Thread Support with `#Name` `@Lookup`**: Fetch messages from channels and threads, including activity messages, and retrieve channels using their names (e.g., #general) as well as their IDs.
 - **Smart History**: Fetch messages with pagination by date (d1, 7d, 1m) or message count.
 - **Search Messages**: Search messages in channels, threads, and DMs using various filters like date, user, and content.
+- **Slack Lists via official API**: Manage Slack Lists items with the official `slackLists.items.*` API using OAuth tokens (`xoxp` or `xoxb`) instead of browser tokens or internal endpoints.
 - **Safe Message Posting**: The `conversations_add_message` tool is disabled by default for safety. Enable it via an environment variable, with optional channel restrictions.
 - **DM and Group DM support**: Retrieve direct messages and group direct messages.
 - **Embedded user information**: Embed user information in messages, for better context.
@@ -85,7 +86,7 @@ Get list of channels
   - `cursor` (string, optional): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
 
 ### 6. search_files_and_canvases:
-Search files (including canvases) using `search.files` with filters.
+Search files (including canvases and Slack Lists) using `search.files` with filters.
 - **Parameters:**
   - `search_query` (string, optional): Search query to filter files. Example: `design doc` or `from:@alice`.
   - `filter_in_channel` (string, optional): Filter files in a specific channel by its ID or name. Example: `C1234567890`, `G1234567890`, or `#general`.
@@ -94,6 +95,7 @@ Search files (including canvases) using `search.files` with filters.
   - `filter_date_after` (string, optional): Filter files created after a specific date in format `YYYY-MM-DD`. Example: `2023-10-01` or `July`.
   - `cursor` (string, default: ""): Cursor for pagination. Use the value of the last row and column in the response as next_cursor field returned from the previous request.
   - `limit` (number, default: 20): The maximum number of items to return. Must be an integer between 1 and 100.
+  - Use a returned Slack List file ID (`F...`) as `list_id` for `lists_items_*` tools.
 
 ### 7. canvases_create:
 Create a new canvas with markdown content
@@ -125,6 +127,39 @@ Read canvas metadata and full content
   - **Metadata**: title, timestamps, URLs, user info, permissions
   - **Content**: Full markdown content downloaded from Slack (via `url_private_download`)
   - **Preview**: Text preview if available
+
+### 11. lists_items_list:
+List items in a Slack List using the official Lists API. Returns list metadata together with items as JSON.
+- **Parameters:**
+  - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
+  - `limit` (number, default: 50): The maximum number of items to return. Must be an integer between 1 and 100.
+  - `cursor` (string, optional): Cursor returned as `next_cursor` from the previous response.
+  - `include_archived` (boolean, default: false): Include archived items.
+
+### 12. lists_items_create:
+Create an item in a Slack List using the official Lists API. Returns JSON.
+- **Parameters:**
+  - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
+  - `field_values` (string, required): JSON object keyed by field ID, field key, or field name. Example: `{"Title":"Ship Lists","Status":"In Progress"}`.
+  - `parent_item_id` (string, optional): Parent item ID when creating a sub-item.
+
+### 13. lists_items_update:
+Update an item in a Slack List using the official Lists API. Returns JSON.
+- **Parameters:**
+  - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
+  - `item_id` (string, required): Slack List item ID.
+  - `field_values` (string, required): JSON object keyed by field ID, field key, or field name. Only supplied fields are updated.
+
+### Lists Constraints
+
+- Lists tools are registered only when using an OAuth token (`xoxp-*` or `xoxb-*`).
+- Required scopes for Lists are `lists:read`, `lists:write`, and `files:read`.
+- `files:read` is used only to resolve List metadata such as schema and field definitions via `files.info`.
+- There is no dedicated `lists_list` or `lists_info` tool. Use the Slack List URL or file ID (`F...`) as `list_id`, and `lists_items_list` returns the list metadata together with items.
+- Browser session tokens (`xoxc` / `xoxd`) and internal Slack APIs are not used for Lists support.
+- For complex field types, `field_values` must contain API-compatible values such as option IDs, user IDs, channel IDs, or link objects where applicable.
+- Unsupported or not-yet-mapped field types return explicit errors instead of silently falling back.
+- Slack Lists are available only on Slack paid plans.
 
 ## Resources
 
@@ -167,7 +202,7 @@ Fetches a CSV directory of all users in the workspace.
 | `SLACK_MCP_XOXC_TOKEN`            | Yes*      | `nil`                     | Slack browser token (`xoxc-...`)                                                                                                                                                                                                                                                          |
 | `SLACK_MCP_XOXD_TOKEN`            | Yes*      | `nil`                     | Slack browser cookie `d` (`xoxd-...`)                                                                                                                                                                                                                                                     |
 | `SLACK_MCP_XOXP_TOKEN`            | Yes*      | `nil`                     | User OAuth token (`xoxp-...`) — alternative to xoxc/xoxd                                                                                                                                                                                                                                  |
-| `SLACK_MCP_XOXB_TOKEN`            | Yes*      | `nil`                     | Bot token (`xoxb-...`) — alternative to xoxp/xoxc/xoxd. Bot has limited access (invited channels only, no search)                                                                                                                                                                         |
+| `SLACK_MCP_XOXB_TOKEN`            | Yes*      | `nil`                     | Bot token (`xoxb-...`) — alternative to xoxp/xoxc/xoxd. Bot has limited access (invited channels only, no search). Lists tools work with OAuth tokens (`xoxp` and `xoxb`) in this fork.                                                                                                      |
 | `SLACK_MCP_PORT`                  | No        | `13080`                   | Port for the MCP server to listen on                                                                                                                                                                                                                                                      |
 | `SLACK_MCP_HOST`                  | No        | `127.0.0.1`               | Host for the MCP server to listen on                                                                                                                                                                                                                                                      |
 | `SLACK_MCP_API_KEY`               | No        | `nil`                     | Bearer token for SSE and HTTP transports                                                                                                                                                                                                                                                            |

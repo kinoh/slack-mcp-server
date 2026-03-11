@@ -17,4 +17,6 @@ Choose one of these installation methods:
 - [npx](03-configuration-and-usage.md#Using-npx)
 - [Docker](03-configuration-and-usage.md#Using-Docker)
 
+For local Go development in this repository, `mise.toml` pins Go. Run `mise install` in the repository root to provision the required Go toolchain.
+
 See next: [Configuration and Usage](03-configuration-and-usage.md)
