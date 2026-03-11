@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,6 +82,10 @@ type SlackAPI interface {
 	GetConversationHistoryContext(ctx context.Context, params *slack.GetConversationHistoryParameters) (*slack.GetConversationHistoryResponse, error)
 	GetConversationRepliesContext(ctx context.Context, params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
 	SearchContext(ctx context.Context, query string, params slack.SearchParameters) (*slack.SearchMessages, *slack.SearchFiles, error)
+	GetListInfoContext(ctx context.Context, listID string) (*ListFile, error)
+	ListsItemsListContext(ctx context.Context, listID string, limit int, cursor string, archived bool) (*ListsItemsListResponse, error)
+	ListsItemsCreateContext(ctx context.Context, listID string, initialFields []map[string]any, parentItemID string) (*ListsItemMutationResponse, error)
+	ListsItemsUpdateContext(ctx context.Context, listID string, cells []map[string]any) (*ListsItemMutationResponse, error)
 
 	// Used to get channels list from both Slack and Enterprise Grid versions
 	GetConversationsContext(ctx context.Context, params *slack.GetConversationsParameters) ([]slack.Channel, string, error)
@@ -92,6 +97,7 @@ type SlackAPI interface {
 type MCPSlackClient struct {
 	slackClient *slack.Client
 	edgeClient  *edge.Client
+	httpClient  *http.Client
 
 	authResponse *slack.AuthTestResponse
 	authProvider auth.Provider
@@ -166,6 +172,7 @@ func NewMCPSlackClient(authProvider auth.Provider, logger *zap.Logger) (*MCPSlac
 	return &MCPSlackClient{
 		slackClient:  slackClient,
 		edgeClient:   edgeClient,
+		httpClient:   httpClient,
 		authResponse: authResponse,
 		authProvider: authProvider,
 		isEnterprise: isEnterprise,
