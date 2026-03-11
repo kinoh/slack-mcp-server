@@ -74,6 +74,26 @@ func TestBuildListFieldInputs(t *testing.T) {
 	require.Len(t, fields, 6)
 
 	assert.Contains(t, fields, map[string]any{
+		"column_id": "col_title",
+		"row_id":    "row_1",
+		"rich_text": []map[string]any{
+			{
+				"type": "rich_text",
+				"elements": []map[string]any{
+					{
+						"type": "rich_text_section",
+						"elements": []map[string]any{
+							{
+								"type": "text",
+								"text": "Ship Lists",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	assert.Contains(t, fields, map[string]any{
 		"column_id": "col_status",
 		"row_id":    "row_1",
 		"select":    []string{"In Progress"},

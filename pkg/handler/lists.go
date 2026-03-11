@@ -324,11 +324,16 @@ func normalizeRichTextValue(value any) ([]map[string]any, error) {
 	case string:
 		return []map[string]any{
 			{
-				"type": "rich_text_section",
+				"type": "rich_text",
 				"elements": []map[string]any{
 					{
-						"type": "text",
-						"text": v,
+						"type": "rich_text_section",
+						"elements": []map[string]any{
+							{
+								"type": "text",
+								"text": v,
+							},
+						},
 					},
 				},
 			},
