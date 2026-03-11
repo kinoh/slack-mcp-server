@@ -13,6 +13,7 @@ This feature-rich Slack MCP Server has:
 - **Enterprise Workspaces Support**: Possibility to integrate with Enterprise Slack setups.
 - **Channel and Thread Support with `#Name` `@Lookup`**: Fetch messages from channels and threads, including activity messages, and retrieve channels using their names (e.g., #general) as well as their IDs.
 - **Smart History**: Fetch messages with pagination by date (d1, 7d, 1m) or message count.
+- **Unread Messages**: Get all unread messages across channels efficiently with priority sorting (DMs > partner channels > internal), @mention filtering, and mark-as-read support.
 - **Search Messages**: Search messages in channels, threads, and DMs using various filters like date, user, and content.
 - **Slack Lists via official API**: Manage Slack Lists items with the official `slackLists.items.*` API using OAuth tokens (`xoxp` or `xoxb`) instead of browser tokens or internal endpoints.
 - **Safe Message Posting**: The `conversations_add_message` tool is disabled by default for safety. Enable it via an environment variable, with optional channel restrictions.
@@ -128,7 +129,37 @@ Read canvas metadata and full content
   - **Content**: Full markdown content downloaded from Slack (via `url_private_download`)
   - **Preview**: Text preview if available
 
-### 11. lists_items_list:
+### 11. reactions_add:
+Add an emoji reaction to a message in a public channel, private channel, or direct message (DM, or IM) conversation.
+
+### 12. reactions_remove:
+Remove an emoji reaction from a message in a public channel, private channel, or direct message (DM, or IM) conversation.
+
+### 13. users_search:
+Search for users by name, email, or display name. Returns user details and DM channel ID if available.
+
+### 14. usergroups_list:
+List all user groups (subteams) in the workspace.
+
+### 15. usergroups_create:
+Create a new user group in the workspace.
+
+### 16. usergroups_update:
+Update an existing user group's metadata.
+
+### 17. usergroups_users_update:
+Update the members of a user group. This replaces all existing members.
+
+### 18. usergroups_me:
+Manage your user group membership: list groups you're in, join a group, or leave a group.
+
+### 19. conversations_unreads
+Get unread messages across all channels efficiently.
+
+### 20. conversations_mark
+Mark a channel or DM as read.
+
+### 21. lists_items_list:
 List items in a Slack List using the official Lists API. Returns list metadata together with items as JSON.
 - **Parameters:**
   - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
@@ -136,14 +167,14 @@ List items in a Slack List using the official Lists API. Returns list metadata t
   - `cursor` (string, optional): Cursor returned as `next_cursor` from the previous response.
   - `include_archived` (boolean, default: false): Include archived items.
 
-### 12. lists_items_create:
+### 22. lists_items_create:
 Create an item in a Slack List using the official Lists API. Returns JSON.
 - **Parameters:**
   - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
   - `field_values` (string, required): JSON object keyed by field ID, field key, or field name. Example: `{"Title":"Ship Lists","Status":"In Progress"}`.
   - `parent_item_id` (string, optional): Parent item ID when creating a sub-item.
 
-### 13. lists_items_update:
+### 23. lists_items_update:
 Update an item in a Slack List using the official Lists API. Returns JSON.
 - **Parameters:**
   - `list_id` (string, required): Slack List file ID in format `Fxxxxxxxxxx` or a Slack List URL.
@@ -212,12 +243,15 @@ Fetches a CSV directory of all users in the workspace.
 | `SLACK_MCP_SERVER_CA`             | No        | `nil`                     | Path to CA certificate                                                                                                                                                                                                                                                                    |
 | `SLACK_MCP_SERVER_CA_TOOLKIT`     | No        | `nil`                     | Inject HTTPToolkit CA certificate to root trust-store for MitM debugging                                                                                                                                                                                                                  |
 | `SLACK_MCP_SERVER_CA_INSECURE`    | No        | `false`                   | Trust all insecure requests (NOT RECOMMENDED)                                                                                                                                                                                                                                             |
-| `SLACK_MCP_ADD_MESSAGE_TOOL`      | No        | `nil`                     | Enable message posting via `conversations_add_message` by setting it to true for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones, while an empty value disables posting by default. |
-| `SLACK_MCP_ADD_MESSAGE_MARK`      | No        | `nil`                     | When the `conversations_add_message` tool is enabled, any new message sent will automatically be marked as read.                                                                                                                                                                          |
+| `SLACK_MCP_ADD_MESSAGE_TOOL`      | No        | `nil`                     | Enable message posting via `conversations_add_message` by setting it to `true` for all channels, a comma-separated list of channel IDs to whitelist specific channels, or use `!` before a channel ID to allow all except specified ones. If empty, the tool is only registered when explicitly listed in `SLACK_MCP_ENABLED_TOOLS`. |
+| `SLACK_MCP_ADD_MESSAGE_MARK`      | No        | `nil`                     | When `conversations_add_message` is enabled (via `SLACK_MCP_ADD_MESSAGE_TOOL` or `SLACK_MCP_ENABLED_TOOLS`), setting this to `true` will automatically mark sent messages as read.                                                                                                        |
 | `SLACK_MCP_ADD_MESSAGE_UNFURLING` | No        | `nil`                     | Enable to let Slack unfurl posted links or set comma-separated list of domains e.g. `github.com,slack.com` to whitelist unfurling only for them. If text contains whitelisted and unknown domain unfurling will be disabled for security reasons.                                         |
+| `SLACK_MCP_MARK_TOOL`             | No        | `nil`                     | Enable the `conversations_mark` tool by setting to `true` or `1`. Disabled by default to prevent accidental marking of messages as read.                                                                                                                                                  |
 | `SLACK_MCP_USERS_CACHE`           | No        | `~/Library/Caches/slack-mcp-server/users_cache.json` (macOS)<br>`~/.cache/slack-mcp-server/users_cache.json` (Linux)<br>`%LocalAppData%/slack-mcp-server/users_cache.json` (Windows) | Path to the users cache file. Used to cache Slack user information to avoid repeated API calls on startup. |
 | `SLACK_MCP_CHANNELS_CACHE`        | No        | `~/Library/Caches/slack-mcp-server/channels_cache_v2.json` (macOS)<br>`~/.cache/slack-mcp-server/channels_cache_v2.json` (Linux)<br>`%LocalAppData%/slack-mcp-server/channels_cache_v2.json` (Windows) | Path to the channels cache file. Used to cache Slack channel information to avoid repeated API calls on startup. |
 | `SLACK_MCP_LOG_LEVEL`             | No        | `info`                    | Log-level for stdout or stderr. Valid values are: `debug`, `info`, `warn`, `error`, `panic` and `fatal`                                                                                                                                                                                   |
+| `SLACK_MCP_GOVSLACK`              | No        | `nil`                     | Set to `true` to enable [GovSlack](https://slack.com/solutions/govslack) mode. Routes API calls to `slack-gov.com` endpoints instead of `slack.com` for FedRAMP-compliant government workspaces.                                                                                          |
+| `SLACK_MCP_ENABLED_TOOLS`         | No        | `nil`                     | Comma-separated list of tools to register. If empty, all read-only tools and usergroups tools are registered; write tools (`conversations_add_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`) require their specific env var OR must be explicitly listed here. When a write tool is listed here, it's enabled without channel restrictions. Available tools: `conversations_history`, `conversations_replies`, `conversations_add_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`, `conversations_search_messages`, `channels_list`, `usergroups_list`, `usergroups_me`, `usergroups_create`, `usergroups_update`, `usergroups_users_update`. |
 
 *You need one of: `xoxp` (user), `xoxb` (bot), or both `xoxc`/`xoxd` tokens for authentication.
 

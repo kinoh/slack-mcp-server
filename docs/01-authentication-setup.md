@@ -59,10 +59,11 @@ Instead of using browser-based tokens (`xoxc`/`xoxd`), you can use a User OAuth 
     - `search:read` - Search a workspace's content. (new since `v1.1.18`)
     - `canvases:write` - Create and edit canvases. (new since `v1.2.0`)
     - `canvases:read` - Read canvas content. (new since `v1.2.0`)
-    - `files:read` - View files in a workspace. (required for reading canvas content via files.info)
     - `lists:read` - Read Slack Lists and their items. (needed for Lists support)
     - `lists:write` - Create and update Slack Lists items. (needed for Lists support)
     - `files:read` - View files in a workspace. (required for reading canvas content via `files.info` and resolving Slack List schema)
+    - `usergroups:read` - View user groups in a workspace.
+    - `usergroups:write` - Create and manage user groups.
 
 3. Install the app to your workspace
 4. Copy the "User OAuth Token" (starts with `xoxp-`)
@@ -95,6 +96,8 @@ To create the app from a manifest with permissions preconfigured, use the follow
                 "canvases:read",
                 "lists:read",
                 "lists:write",
+                "usergroups:read",
+                "usergroups:write",
                 "files:read"
             ]
         }

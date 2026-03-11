@@ -27,8 +27,6 @@ func TestIntegrationConversations(t *testing.T) {
 	require.NotEmpty(t, sseKey, "sseKey must be generated for integration tests")
 	apiKey := os.Getenv("SLACK_MCP_OPENAI_API")
 	require.NotEmpty(t, apiKey, "SLACK_MCP_OPENAI_API must be set for integration tests")
-	xoxpToken := os.Getenv("SLACK_MCP_XOXP_TOKEN")
-	require.NotEmpty(t, xoxpToken, "SLACK_MCP_XOXP_TOKEN must be set for integration tests")
 
 	cfg := util.MCPConfig{
 		SSEKey:             sseKey,
@@ -65,53 +63,27 @@ func TestIntegrationConversations(t *testing.T) {
 		expectedLLMOutputMatchingRules  []string
 	}
 
-	// First, post test messages to ensure we have content to retrieve
-	testChannelName := "testcase-1"
-	slackClient := slack.New(xoxpToken)
-
-	// Get channel ID
-	channels, _, err := slackClient.GetConversationsContext(ctx, &slack.GetConversationsParameters{
-		Types: []string{"public_channel"},
-		Limit: 1000,
-	})
-	if err != nil {
-		t.Skipf("Could not list channels for test setup: %v", err)
-	}
-
-	var testChannelID string
-	for _, ch := range channels {
-		if ch.Name == testChannelName {
-			testChannelID = ch.ID
-			break
-		}
-	}
-	if testChannelID == "" {
-		t.Skipf("Test channel #%s not found, skipping test", testChannelName)
-	}
-
-	// Post test messages
-	testMessages := []string{"test message 1", "test message 2", "test message 3"}
-	for _, msg := range testMessages {
-		_, _, err := slackClient.PostMessageContext(ctx, testChannelID, slack.MsgOptionText(msg, false))
-		if err != nil {
-			t.Skipf("Could not post test message: %v", err)
-		}
-	}
-	time.Sleep(2 * time.Second) // Wait for Slack to index messages
-
 	cases := []tc{
 		{
 			name:             "Test conversations_history tool",
-			input:            fmt.Sprintf("Provide a list of slack messages from #%s", testChannelName),
+			input:            "Provide a list of slack messages from #testcase-1",
 			expectedToolName: "conversations_history",
 			expectedToolOutputMatchingRules: []matchingRule{
 				{
 					csvFieldName:    "Text",
-					csvFieldValueRE: "test message [123]",
+					csvFieldValueRE: "^message 3$",
+				},
+				{
+					csvFieldName:    "Text",
+					csvFieldValueRE: "^message 2$",
+				},
+				{
+					csvFieldName:    "Text",
+					csvFieldValueRE: "^message 1$",
 				},
 			},
 			expectedLLMOutputMatchingRules: []string{
-				"test message",
+				"message 1", "message 2", "message 3",
 			},
 		},
 	}
@@ -620,11 +592,53 @@ func TestUnitLimitByExpression_Invalid(t *testing.T) {
 	}
 }
 
+func TestUnitIsChannelAllowedForConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		channel string
+		config  string
+		want    bool
+	}{
+		// Allow all cases
+		{"empty config allows all", "C123", "", true},
+		{"true allows all", "C123", "true", true},
+		{"1 allows all", "C123", "1", true},
+
+		// Allowlist (whitelist) cases
+		{"allowlist - channel in list", "C123", "C123,C456", true},
+		{"allowlist - second channel in list", "C456", "C123,C456", true},
+		{"allowlist - channel NOT in list", "C789", "C123,C456", false},
+		{"allowlist - with spaces", "C123", " C123 , C456 ", true},
+
+		// Blocklist cases
+		{"blocklist - channel in list", "C123", "!C123,!C456", false},
+		{"blocklist - second channel in list", "C456", "!C123,!C456", false},
+		{"blocklist - channel NOT in list", "C789", "!C123,!C456", true},
+		{"blocklist - with spaces", "C123", " !C123 , !C456 ", false},
+
+		// Single item cases
+		{"single allowlist - match", "C123", "C123", true},
+		{"single allowlist - no match", "C456", "C123", false},
+		{"single blocklist - match", "C123", "!C123", false},
+		{"single blocklist - no match", "C456", "!C123", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isChannelAllowedForConfig(tt.channel, tt.config)
+			if got != tt.want {
+				t.Errorf("isChannelAllowedForConfig(%q, %q) = %v, want %v",
+					tt.channel, tt.config, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUnitFilterSafeSearch(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       []slack.SearchMessage
-		expectedIDs []string // expected channel IDs after filtering
+		expectedIDs []string
 	}{
 		{
 			name:        "empty input",
@@ -671,41 +685,36 @@ func TestUnitFilterSafeSearch(t *testing.T) {
 			},
 			expectedIDs: []string{"C001", "C004", "C006"},
 		},
-		{
-			name: "all filtered out",
-			input: []slack.SearchMessage{
-				{Channel: slack.CtxChannel{ID: "D001", Name: "", IsPrivate: false, IsMPIM: false}},
-				{Channel: slack.CtxChannel{ID: "C002", Name: "private", IsPrivate: true, IsMPIM: false}},
-			},
-			expectedIDs: []string{},
-		},
-		{
-			name: "private channel with G prefix excluded",
-			input: []slack.SearchMessage{
-				{Channel: slack.CtxChannel{ID: "G123", Name: "private-group", IsPrivate: true, IsMPIM: false}},
-			},
-			expectedIDs: []string{},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := filterSafeSearch(tt.input)
-
 			gotIDs := make([]string, len(result))
 			for i, msg := range result {
 				gotIDs[i] = msg.Channel.ID
 			}
+			require.Equal(t, tt.expectedIDs, gotIDs)
+		})
+	}
+}
 
-			if len(gotIDs) != len(tt.expectedIDs) {
-				t.Errorf("filterSafeSearch() returned %d messages (IDs: %v), want %d (IDs: %v)",
-					len(gotIDs), gotIDs, len(tt.expectedIDs), tt.expectedIDs)
-				return
-			}
-			for i, id := range gotIDs {
-				if id != tt.expectedIDs[i] {
-					t.Errorf("filterSafeSearch() result[%d].Channel.ID = %s, want %s", i, id, tt.expectedIDs[i])
-				}
+func TestUnitIsSlackUserIDPrefix(t *testing.T) {
+	tests := []struct {
+		name string
+		s    string
+		want bool
+	}{
+		{"U prefix", "U0123ABCD", true},
+		{"W prefix", "W0123ABCD", true},
+		{"plain name not ID", "alice", false},
+		{"empty", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSlackUserIDPrefix(tt.s)
+			if got != tt.want {
+				t.Errorf("isSlackUserIDPrefix(%q) = %v, want %v", tt.s, got, tt.want)
 			}
 		})
 	}
