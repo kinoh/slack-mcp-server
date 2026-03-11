@@ -83,6 +83,7 @@ type SlackAPI interface {
 	GetConversationRepliesContext(ctx context.Context, params *slack.GetConversationRepliesParameters) (msgs []slack.Message, hasMore bool, nextCursor string, err error)
 	SearchContext(ctx context.Context, query string, params slack.SearchParameters) (*slack.SearchMessages, *slack.SearchFiles, error)
 	GetListInfoContext(ctx context.Context, listID string) (*ListFile, error)
+	ListsItemsInfoContext(ctx context.Context, listID, itemID string) (map[string]any, error)
 	ListsItemsListContext(ctx context.Context, listID string, limit int, cursor string, archived bool) (*ListsItemsListResponse, error)
 	ListsItemsCreateContext(ctx context.Context, listID string, initialFields []map[string]any, parentItemID string) (*ListsItemMutationResponse, error)
 	ListsItemsUpdateContext(ctx context.Context, listID string, cells []map[string]any) (*ListsItemMutationResponse, error)

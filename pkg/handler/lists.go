@@ -163,6 +163,12 @@ func (lh *ListsHandler) ListsItemsUpdateHandler(ctx context.Context, request mcp
 	if updatedItem == nil && len(resp.Items) > 0 {
 		updatedItem = resp.Items[0]
 	}
+	if updatedItem == nil {
+		updatedItem, err = lh.apiProvider.Slack().ListsItemsInfoContext(ctx, listID, itemID)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
 
 	return marshalJSONToolResult(map[string]any{
 		"list":         list,

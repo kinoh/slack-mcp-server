@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -21,11 +22,11 @@ type teamAPIResponse struct {
 }
 
 type ListColumn struct {
-	ID      string           `json:"id,omitempty"`
-	Key     string           `json:"key,omitempty"`
-	Name    string           `json:"name,omitempty"`
-	Type    string           `json:"type,omitempty"`
-	Options []map[string]any `json:"options,omitempty"`
+	ID      string `json:"id,omitempty"`
+	Key     string `json:"key,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Type    string `json:"type,omitempty"`
+	Options any    `json:"options,omitempty"`
 }
 
 type ListMetadata struct {
@@ -57,6 +58,12 @@ type ListsItemsListResponse struct {
 	Items []map[string]any `json:"items,omitempty"`
 }
 
+type ListsItemsInfoResponse struct {
+	teamAPIResponse
+	Item   map[string]any `json:"item,omitempty"`
+	Record map[string]any `json:"record,omitempty"`
+}
+
 type ListsItemMutationResponse struct {
 	teamAPIResponse
 	Item  map[string]any   `json:"item,omitempty"`
@@ -65,8 +72,11 @@ type ListsItemMutationResponse struct {
 
 func (c *MCPSlackClient) GetListInfoContext(ctx context.Context, listID string) (*ListFile, error) {
 	resp := listInfoResponse{}
-	if err := c.callTeamAPI(ctx, "files.info", map[string]any{
-		"file": listID,
+	if err := c.callTeamAPIForm(ctx, "files.info", url.Values{
+		"token": {c.authProvider.SlackToken()},
+		"file":  {listID},
+		"count": {"0"},
+		"page":  {"0"},
 	}, &resp); err != nil {
 		return nil, err
 	}
@@ -97,6 +107,23 @@ func (c *MCPSlackClient) ListsItemsListContext(ctx context.Context, listID strin
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (c *MCPSlackClient) ListsItemsInfoContext(ctx context.Context, listID, itemID string) (map[string]any, error) {
+	resp := ListsItemsInfoResponse{}
+	if err := c.callTeamAPI(ctx, "slackLists.items.info", map[string]any{
+		"list_id": listID,
+		"id":      itemID,
+	}, &resp); err != nil {
+		return nil, err
+	}
+	if resp.Item == nil && resp.Record != nil {
+		resp.Item = resp.Record
+	}
+	if resp.Item == nil {
+		return nil, fmt.Errorf("slackLists.items.info returned no item for %q", itemID)
+	}
+	return resp.Item, nil
 }
 
 func (c *MCPSlackClient) ListsItemsCreateContext(ctx context.Context, listID string, initialFields []map[string]any, parentItemID string) (*ListsItemMutationResponse, error) {
@@ -165,6 +192,39 @@ func (c *MCPSlackClient) callTeamAPI(ctx context.Context, method string, payload
 	return nil
 }
 
+func (c *MCPSlackClient) callTeamAPIForm(ctx context.Context, method string, form url.Values, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.teamEndpoint, "/")+"/api/"+method, strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.authProvider.SlackToken())
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("%s: failed to decode response: %w", method, err)
+	}
+
+	base, ok := out.(interface{ responseBase() *teamAPIResponse })
+	if ok {
+		if err := validateTeamAPIResponse(method, base.responseBase()); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func validateTeamAPIResponse(method string, resp *teamAPIResponse) error {
 	if resp == nil || resp.Ok {
 		return nil
@@ -182,6 +242,10 @@ func (r *listInfoResponse) responseBase() *teamAPIResponse {
 }
 
 func (r *ListsItemsListResponse) responseBase() *teamAPIResponse {
+	return &r.teamAPIResponse
+}
+
+func (r *ListsItemsInfoResponse) responseBase() *teamAPIResponse {
 	return &r.teamAPIResponse
 }
 
