@@ -112,7 +112,7 @@ You can also use a Bot token instead of a User token:
 4. Copy the "Bot User OAuth Token" (starts with `xoxb-`)
 5. **Important**: Bot must be invited to channels for access
 
-> **Note**: Bot tokens cannot use `search.messages` API, so `conversations_search_messages` tool will not be available. Lists tools are registered only for bot-token auth in this fork.
+> **Note**: Bot tokens cannot use `search.messages` API, so `conversations_search_messages` tool will not be available. Lists tools are registered for OAuth-token auth (`xoxp` and `xoxb`) in this fork.
 
 
 See next: [Installation](02-installation.md)

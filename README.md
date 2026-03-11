@@ -14,7 +14,7 @@ This feature-rich Slack MCP Server has:
 - **Channel and Thread Support with `#Name` `@Lookup`**: Fetch messages from channels and threads, including activity messages, and retrieve channels using their names (e.g., #general) as well as their IDs.
 - **Smart History**: Fetch messages with pagination by date (d1, 7d, 1m) or message count.
 - **Search Messages**: Search messages in channels, threads, and DMs using various filters like date, user, and content.
-- **Slack Lists via official API**: Manage Slack Lists items with the official `slackLists.items.*` API using bot OAuth scopes instead of browser tokens or internal endpoints.
+- **Slack Lists via official API**: Manage Slack Lists items with the official `slackLists.items.*` API using OAuth tokens (`xoxp` or `xoxb`) instead of browser tokens or internal endpoints.
 - **Safe Message Posting**: The `conversations_add_message` tool is disabled by default for safety. Enable it via an environment variable, with optional channel restrictions.
 - **DM and Group DM support**: Retrieve direct messages and group direct messages.
 - **Embedded user information**: Embed user information in messages, for better context.
@@ -109,7 +109,7 @@ Update an item in a Slack List using the official Lists API. Returns JSON.
 
 ### Lists Constraints
 
-- Lists tools are registered only when using a bot token (`xoxb-*`).
+- Lists tools are registered only when using an OAuth token (`xoxp-*` or `xoxb-*`).
 - Required scopes for Lists are `lists:read`, `lists:write`, and `files:read`.
 - `files:read` is used only to resolve List metadata such as schema and field definitions via `files.info`.
 - There is no dedicated `lists_list` or `lists_info` tool. Use the Slack List URL or file ID (`F...`) as `list_id`, and `lists_items_list` returns the list metadata together with items.
@@ -159,7 +159,7 @@ Fetches a CSV directory of all users in the workspace.
 | `SLACK_MCP_XOXC_TOKEN`            | Yes*      | `nil`                     | Slack browser token (`xoxc-...`)                                                                                                                                                                                                                                                          |
 | `SLACK_MCP_XOXD_TOKEN`            | Yes*      | `nil`                     | Slack browser cookie `d` (`xoxd-...`)                                                                                                                                                                                                                                                     |
 | `SLACK_MCP_XOXP_TOKEN`            | Yes*      | `nil`                     | User OAuth token (`xoxp-...`) — alternative to xoxc/xoxd                                                                                                                                                                                                                                  |
-| `SLACK_MCP_XOXB_TOKEN`            | Yes*      | `nil`                     | Bot token (`xoxb-...`) — alternative to xoxp/xoxc/xoxd. Bot has limited access (invited channels only, no search) but is the required auth mode for Lists tools in this fork.                                                                                                              |
+| `SLACK_MCP_XOXB_TOKEN`            | Yes*      | `nil`                     | Bot token (`xoxb-...`) — alternative to xoxp/xoxc/xoxd. Bot has limited access (invited channels only, no search). Lists tools work with OAuth tokens (`xoxp` and `xoxb`) in this fork.                                                                                                      |
 | `SLACK_MCP_PORT`                  | No        | `13080`                   | Port for the MCP server to listen on                                                                                                                                                                                                                                                      |
 | `SLACK_MCP_HOST`                  | No        | `127.0.0.1`               | Host for the MCP server to listen on                                                                                                                                                                                                                                                      |
 | `SLACK_MCP_API_KEY`               | No        | `nil`                     | Bearer token for SSE and HTTP transports                                                                                                                                                                                                                                                            |

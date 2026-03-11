@@ -169,7 +169,7 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger) *MCPServer
 		),
 	), channelsHandler.ChannelsHandler)
 
-	if provider.IsBotToken() {
+	if provider.IsOAuthToken() {
 		listsHandler := handler.NewListsHandler(provider, logger)
 
 		s.AddTool(mcp.NewTool("lists_items_list",

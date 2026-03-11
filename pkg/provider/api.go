@@ -307,6 +307,10 @@ func (c *MCPSlackClient) IsBotToken() bool {
 	return c.isBotToken
 }
 
+func (c *MCPSlackClient) IsOAuthToken() bool {
+	return c.isOAuth
+}
+
 func (c *MCPSlackClient) Raw() struct {
 	Slack *slack.Client
 	Edge  *edge.Client
@@ -770,6 +774,11 @@ func (ap *ApiProvider) Slack() SlackAPI {
 func (ap *ApiProvider) IsBotToken() bool {
 	client, ok := ap.client.(*MCPSlackClient)
 	return ok && client != nil && client.IsBotToken()
+}
+
+func (ap *ApiProvider) IsOAuthToken() bool {
+	client, ok := ap.client.(*MCPSlackClient)
+	return ok && client != nil && client.IsOAuthToken()
 }
 
 func mapChannel(
