@@ -9,6 +9,7 @@ It tracks upstream while carrying a small set of Slack-workflow focused changes:
 - Search results include safer filtering behavior for channel cache usage.
 - Slack Lists item tools are available for OAuth tokens, including bot tokens where the Slack API supports them.
 - Slack List field values are normalized for Slack's rich text field format, and list metadata is returned with item responses.
+- SSE and Streamable HTTP can be served on the same host and port with `--transport sse,http`.
 
 For upstream behavior and project background, refer to the original repository. This README only describes the fork-level orientation.
 
