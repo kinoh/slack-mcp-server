@@ -260,7 +260,7 @@ docker-compose up -d
 
 | Argument                    | Required ? | Description                                                                                                                                                                                                         |
 |-----------------------------|------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--transport` or `-t`       | Yes        | Select transport for the MCP Server, possible values are: `stdio`, `sse`                                                                                                                                            |
+| `--transport` or `-t`       | Yes        | Select transport for the MCP Server, possible values are: `stdio`, `sse`, `http`, or `sse,http`. `sse` and `http` can also be provided with repeated flags, e.g. `--transport sse --transport http`. `stdio` cannot be combined with HTTP-based transports. |
 | `--enabled-tools` or `-e`   | No         | Comma-separated list of tools to register. If not set, all tools are registered. Runtime permissions (e.g., `SLACK_MCP_ADD_MESSAGE_TOOL`) are still enforced. Available tools: `conversations_history`, `conversations_replies`, `conversations_add_message`, `reactions_add`, `reactions_remove`, `attachment_get_data`, `conversations_search_messages`, `channels_list`, `usergroups_list`, `usergroups_me`, `usergroups_create`, `usergroups_update`, `usergroups_users_update`. |
 
 ### Environment Variables

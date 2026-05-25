@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -21,13 +22,19 @@ var defaultSseHost = "127.0.0.1"
 var defaultSsePort = 13080
 
 func main() {
-	var transport string
+	transports := newTransportFlag()
 	var enabledToolsFlag string
-	flag.StringVar(&transport, "t", "stdio", "Transport type (stdio, sse or http)")
-	flag.StringVar(&transport, "transport", "stdio", "Transport type (stdio, sse or http)")
+	flag.Var(transports, "t", "Transport type (stdio, sse, http or sse,http)")
+	flag.Var(transports, "transport", "Transport type (stdio, sse, http or sse,http)")
 	flag.StringVar(&enabledToolsFlag, "e", "", "Comma-separated list of enabled tools (empty = all tools)")
 	flag.StringVar(&enabledToolsFlag, "enabled-tools", "", "Comma-separated list of enabled tools (empty = all tools)")
 	flag.Parse()
+
+	transport, err := transports.canonical()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid transport type: %v\n", err)
+		os.Exit(1)
+	}
 
 	if enabledToolsFlag == "" {
 		enabledToolsFlag = os.Getenv("SLACK_MCP_ENABLED_TOOLS")
@@ -66,7 +73,7 @@ func main() {
 		)
 	}
 
-	p := provider.New(transport, logger)
+	p := provider.New(providerTransport(transport), logger)
 	s := server.NewMCPServer(p, logger, enabledTools)
 
 	go func() {
@@ -150,13 +157,176 @@ func main() {
 				zap.Error(err),
 			)
 		}
+	case "sse,http", "http,sse":
+		host := os.Getenv("SLACK_MCP_HOST")
+		if host == "" {
+			host = defaultSseHost
+		}
+		port := os.Getenv("SLACK_MCP_PORT")
+		if port == "" {
+			port = strconv.Itoa(defaultSsePort)
+		}
+
+		addr := host + ":" + port
+		sseServer := s.ServeSSE(addr)
+		httpServer := s.ServeHTTP(addr)
+
+		mux := http.NewServeMux()
+		mux.Handle("/sse", sseServer.SSEHandler())
+		mux.Handle("/message", sseServer.MessageHandler())
+		mux.Handle("/mcp", httpServer)
+
+		handler := accessLogMiddleware(logger, mux)
+		logger.Info(
+			fmt.Sprintf("SSE and HTTP servers listening on %s", addr),
+			zap.String("context", "console"),
+			zap.String("host", host),
+			zap.String("port", port),
+			zap.String("sse_endpoint", fmt.Sprintf("%s/sse", addr)),
+			zap.String("sse_message_endpoint", fmt.Sprintf("%s/message", addr)),
+			zap.String("http_endpoint", fmt.Sprintf("%s/mcp", addr)),
+		)
+
+		if ready, _ := p.IsReady(); !ready {
+			logger.Info("Slack MCP Server is still warming up caches",
+				zap.String("context", "console"),
+			)
+		}
+
+		httpSrv := &http.Server{
+			Addr:    addr,
+			Handler: handler,
+		}
+		if err := httpSrv.ListenAndServe(); err != nil {
+			logger.Fatal("Server error",
+				zap.String("context", "console"),
+				zap.Error(err),
+			)
+		}
 	default:
 		logger.Fatal("Invalid transport type",
 			zap.String("context", "console"),
 			zap.String("transport", transport),
-			zap.String("allowed", "stdio, sse, http"),
+			zap.String("allowed", "stdio, sse, http, sse,http"),
 		)
 	}
+}
+
+type transportFlag struct {
+	values []string
+	set    bool
+}
+
+func newTransportFlag() *transportFlag {
+	return &transportFlag{values: []string{"stdio"}}
+}
+
+func (f *transportFlag) String() string {
+	return strings.Join(f.values, ",")
+}
+
+func (f *transportFlag) Set(value string) error {
+	if !f.set {
+		f.values = nil
+		f.set = true
+	}
+
+	for _, transport := range strings.Split(value, ",") {
+		transport = strings.TrimSpace(transport)
+		if transport == "" {
+			return fmt.Errorf("empty transport")
+		}
+		f.values = append(f.values, transport)
+	}
+
+	return nil
+}
+
+func (f *transportFlag) canonical() (string, error) {
+	if len(f.values) == 0 {
+		return "", fmt.Errorf("transport is required")
+	}
+
+	seen := map[string]bool{}
+	for _, transport := range f.values {
+		switch transport {
+		case "stdio", "sse", "http":
+			if seen[transport] {
+				return "", fmt.Errorf("duplicate transport %q", transport)
+			}
+			seen[transport] = true
+		default:
+			return "", fmt.Errorf("unsupported transport %q; allowed values are stdio, sse, http and sse,http", transport)
+		}
+	}
+
+	if seen["stdio"] && len(seen) > 1 {
+		return "", fmt.Errorf("stdio cannot be combined with sse or http")
+	}
+	if seen["stdio"] {
+		return "stdio", nil
+	}
+	if seen["sse"] && seen["http"] {
+		return "sse,http", nil
+	}
+	if seen["sse"] {
+		return "sse", nil
+	}
+	if seen["http"] {
+		return "http", nil
+	}
+
+	return "", fmt.Errorf("transport is required")
+}
+
+func providerTransport(transport string) string {
+	if transport == "sse,http" || transport == "http,sse" {
+		return "http"
+	}
+
+	return transport
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func accessLogMiddleware(logger *zap.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusRecorder{
+			ResponseWriter: w,
+			status:         http.StatusOK,
+		}
+		start := time.Now()
+
+		next.ServeHTTP(recorder, r)
+
+		logger.Info("HTTP access",
+			zap.String("context", "http"),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.Int("status", recorder.status),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.String("user_agent", r.UserAgent()),
+		)
+	})
 }
 
 func newUsersWatcher(p *provider.ApiProvider, once *sync.Once, logger *zap.Logger) func() {
