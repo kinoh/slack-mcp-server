@@ -182,9 +182,9 @@ func main() {
 			zap.String("context", "console"),
 			zap.String("host", host),
 			zap.String("port", port),
-			zap.String("sse_endpoint", fmt.Sprintf("%s/sse", addr)),
-			zap.String("sse_message_endpoint", fmt.Sprintf("%s/message", addr)),
-			zap.String("http_endpoint", fmt.Sprintf("%s/mcp", addr)),
+			zap.String("sse_endpoint", "/sse"),
+			zap.String("sse_message_endpoint", "/message"),
+			zap.String("http_endpoint", "/mcp"),
 		)
 
 		if ready, _ := p.IsReady(); !ready {
