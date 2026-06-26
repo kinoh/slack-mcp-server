@@ -124,6 +124,12 @@ Parameters:
 
 The result is JSON text with `ok`, `kind`, `source_canvas_id`, `transcript_file_id`, `filetype`, `mimetype`, `segments`, and `raw_file_metadata` when transcript parsing succeeds. Failure results include `reason` values such as `missing_scope`, `file_not_found`, `not_in_channel`, `not_visible`, `access_denied`, `transcript_file_not_found`, `api_unsupported`, `unexpected_html`, or `parse_failed`.
 
+Each transcript segment may include:
+- `offset`: Relative position from the start of the huddle, such as `0:27` or `1:02:03`. This is not a Slack message timestamp.
+- `user_id`: Slack user ID of the speaker, when available.
+- `speaker`: Speaker name, when available.
+- `text`: Transcript text.
+
 ## Canvas Tools
 
 Canvas support was integrated from PR #123 and then documented for section lookup usage in this fork.
