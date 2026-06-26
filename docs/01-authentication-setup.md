@@ -61,7 +61,7 @@ Instead of using browser-based tokens (`xoxc`/`xoxd`), you can use a User OAuth 
     - `canvases:read` - Read canvas content. (new since `v1.2.0`)
     - `lists:read` - Read Slack Lists and their items. (needed for Lists support)
     - `lists:write` - Create and update Slack Lists items. (needed for Lists support)
-    - `files:read` - View files in a workspace. (required for reading canvas content via `files.info` and resolving Slack List schema)
+    - `files:read` - View files in a workspace. (required for reading canvas content via `files.info`, resolving Slack List schema, and reading huddle transcript file metadata)
     - `usergroups:read` - View user groups in a workspace.
     - `usergroups:write` - Create and manage user groups.
 

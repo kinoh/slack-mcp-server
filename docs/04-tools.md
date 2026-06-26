@@ -115,6 +115,15 @@ Downloads an attachment by Slack file ID. This write-sensitive data access tool 
 Parameters:
 - `file_id` (string, required): Slack file ID such as `F1234567890`.
 
+### `slack_huddle_transcript_read`
+
+Reads a Slack huddle transcript file, or resolves a huddle transcript embedded in Slack AI meeting notes Canvas metadata when Slack exposes the transcript file ID. The tool returns the summary Canvas and transcript body as separate resources and does not treat Canvas metadata-only access as transcript success.
+
+Parameters:
+- `url_or_file_id` (string, required): Slack huddle transcript file ID or Slack Canvas/docs URL containing a file ID.
+
+The result is JSON text with `ok`, `kind`, `source_canvas_id`, `transcript_file_id`, `filetype`, `mimetype`, `segments`, and `raw_file_metadata` when transcript parsing succeeds. Failure results include `reason` values such as `missing_scope`, `file_not_found`, `not_in_channel`, `not_visible`, `access_denied`, `transcript_file_not_found`, `api_unsupported`, `unexpected_html`, or `parse_failed`.
+
 ## Canvas Tools
 
 Canvas support was integrated from PR #123 and then documented for section lookup usage in this fork.
