@@ -16,14 +16,27 @@ type FileInfoRawResponse struct {
 	Raw      map[string]any `json:"-"`
 }
 
-func (c *MCPSlackClient) GetFileInfoRawContext(ctx context.Context, fileID string) (*FileInfoRawResponse, error) {
+type FileInfoRawOption func(url.Values)
+
+func WithHuddleTranscription() FileInfoRawOption {
+	return func(values url.Values) {
+		values.Set("include_transcription", "true")
+		values.Set("reason", "slack-ai-fetch-huddle-transcript")
+	}
+}
+
+func (c *MCPSlackClient) GetFileInfoRawContext(ctx context.Context, fileID string, options ...FileInfoRawOption) (*FileInfoRawResponse, error) {
 	resp := FileInfoRawResponse{}
-	if err := c.callTeamAPIForm(ctx, "files.info", url.Values{
+	values := url.Values{
 		"token": {c.authProvider.SlackToken()},
 		"file":  {fileID},
 		"count": {"0"},
 		"page":  {"0"},
-	}, &resp); err != nil {
+	}
+	for _, option := range options {
+		option(values)
+	}
+	if err := c.callTeamAPIForm(ctx, "files.info", values, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Ok && resp.File == nil {

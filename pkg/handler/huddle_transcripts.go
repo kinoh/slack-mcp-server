@@ -74,7 +74,7 @@ func (hh *HuddleTranscriptsHandler) HuddleTranscriptReadHandler(ctx context.Cont
 		})
 	}
 
-	resp, err := hh.apiProvider.Slack().GetFileInfoRawContext(ctx, sourceID)
+	resp, err := hh.apiProvider.Slack().GetFileInfoRawContext(ctx, sourceID, provider.WithHuddleTranscription())
 	if err != nil {
 		hh.logger.Error("files.info failed for huddle transcript read", zap.String("file_id", sourceID), zap.Error(err))
 		return huddleTranscriptResult(map[string]any{
@@ -109,7 +109,7 @@ func (hh *HuddleTranscriptsHandler) HuddleTranscriptReadHandler(ctx context.Cont
 		})
 	}
 
-	transcriptResp, err := hh.apiProvider.Slack().GetFileInfoRawContext(ctx, transcriptFileID)
+	transcriptResp, err := hh.apiProvider.Slack().GetFileInfoRawContext(ctx, transcriptFileID, provider.WithHuddleTranscription())
 	if err != nil {
 		hh.logger.Error("files.info failed for embedded huddle transcript", zap.String("source_canvas_id", sourceID), zap.String("transcript_file_id", transcriptFileID), zap.Error(err))
 		return huddleTranscriptResult(map[string]any{
@@ -311,7 +311,12 @@ func parseTranscriptValue(value any) ([]huddleTranscriptSegment, error) {
 	case []any:
 		return parseTranscriptArray(v)
 	case map[string]any:
-		for _, key := range []string{"segments", "utterances", "items", "transcripts", "transcript"} {
+		if blocks, ok := v["blocks"]; ok {
+			if segments, err := parseRichTextTranscriptBlocks(blocks); err == nil {
+				return segments, nil
+			}
+		}
+		for _, key := range []string{"segments", "utterances", "items", "transcripts", "transcript", "lines"} {
 			if nested, ok := v[key]; ok {
 				return parseTranscriptValue(nested)
 			}
@@ -327,6 +332,10 @@ func parseTranscriptValue(value any) ([]huddleTranscriptSegment, error) {
 }
 
 func parseTranscriptArray(values []any) ([]huddleTranscriptSegment, error) {
+	if segments, err := parseRichTextTranscriptBlocks(values); err == nil {
+		return segments, nil
+	}
+
 	segments := make([]huddleTranscriptSegment, 0, len(values))
 	for _, value := range values {
 		switch v := value.(type) {
@@ -349,13 +358,98 @@ func parseTranscriptArray(values []any) ([]huddleTranscriptSegment, error) {
 }
 
 func segmentFromMap(item map[string]any) huddleTranscriptSegment {
+	offset := firstStringFromMap(item, "offset", "offset_text", "start_offset")
+	if offset == "" {
+		if startTimeMS, ok := int64FromMapOK(item, "start_time_ms"); ok {
+			offset = formatTranscriptOffsetMS(startTimeMS)
+		}
+	}
 	return huddleTranscriptSegment{
-		Offset:    firstStringFromMap(item, "offset", "offset_text", "start_offset"),
+		Offset:    offset,
 		Timestamp: firstStringFromMap(item, "timestamp", "ts", "start_time", "start"),
 		UserID:    firstStringFromMap(item, "user_id", "user", "speaker_user_id"),
 		Speaker:   firstStringFromMap(item, "speaker", "speaker_name", "name"),
-		Text:      firstStringFromMap(item, "text", "content", "transcript"),
+		Text:      firstStringFromMap(item, "text", "content", "contents", "transcript"),
 	}
+}
+
+func parseRichTextTranscriptBlocks(value any) ([]huddleTranscriptSegment, error) {
+	segments := make([]huddleTranscriptSegment, 0)
+	parseRichTextTranscriptNode(value, &segments)
+	if len(segments) == 0 {
+		return nil, errors.New("no transcript segments found in rich text blocks")
+	}
+	return segments, nil
+}
+
+func parseRichTextTranscriptNode(value any, segments *[]huddleTranscriptSegment) {
+	switch v := value.(type) {
+	case []any:
+		for _, nested := range v {
+			parseRichTextTranscriptNode(nested, segments)
+		}
+	case map[string]any:
+		if stringFromMap(v, "type") == "rich_text_section" {
+			if segment := segmentFromRichTextSection(v); segment.Text != "" {
+				*segments = append(*segments, segment)
+			}
+			return
+		}
+		if elements, ok := v["elements"]; ok {
+			parseRichTextTranscriptNode(elements, segments)
+		}
+	}
+}
+
+func segmentFromRichTextSection(section map[string]any) huddleTranscriptSegment {
+	elements, _ := section["elements"].([]any)
+	segment := huddleTranscriptSegment{}
+	var textParts []string
+	for _, element := range elements {
+		elementMap, ok := element.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch stringFromMap(elementMap, "type") {
+		case "user":
+			if segment.UserID == "" {
+				segment.UserID = stringFromMap(elementMap, "user_id")
+			}
+		case "text":
+			text := stringFromMap(elementMap, "text")
+			if offset := extractTranscriptOffsetMarker(text); offset != "" {
+				segment.Offset = offset
+				continue
+			}
+			if trimmed := strings.TrimSpace(text); trimmed != "" {
+				textParts = append(textParts, trimmed)
+			}
+		}
+	}
+	segment.Text = strings.TrimSpace(strings.Join(textParts, ""))
+	return segment
+}
+
+func extractTranscriptOffsetMarker(text string) string {
+	match := regexp.MustCompile(`^\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]:\s*$`).FindStringSubmatch(text)
+	if len(match) != 2 {
+		return ""
+	}
+	return match[1]
+}
+
+func formatTranscriptOffsetMS(milliseconds int64) string {
+	if milliseconds < 0 {
+		milliseconds = 0
+	}
+	totalSeconds := milliseconds / 1000
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+	if hours > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
+	}
+	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }
 
 func parsePlainTranscript(text string) ([]huddleTranscriptSegment, error) {
@@ -461,21 +555,29 @@ func firstStringFromMap(values map[string]any, keys ...string) string {
 }
 
 func int64FromMap(values map[string]any, key string) int64 {
+	value, ok := int64FromMapOK(values, key)
+	if !ok {
+		return 0
+	}
+	return value
+}
+
+func int64FromMapOK(values map[string]any, key string) (int64, bool) {
 	value, ok := values[key]
 	if !ok || value == nil {
-		return 0
+		return 0, false
 	}
 	switch v := value.(type) {
 	case int64:
-		return v
+		return v, true
 	case int:
-		return int64(v)
+		return int64(v), true
 	case float64:
-		return int64(v)
+		return int64(v), true
 	case json.Number:
-		i, _ := v.Int64()
-		return i
+		i, err := v.Int64()
+		return i, err == nil
 	default:
-		return 0
+		return 0, false
 	}
 }

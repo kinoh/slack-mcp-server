@@ -257,7 +257,7 @@ type SlackAPI interface {
 
 	// Used to get files
 	GetFileInfoContext(ctx context.Context, fileID string, count, page int) (*slack.File, []slack.Comment, *slack.Paging, error)
-	GetFileInfoRawContext(ctx context.Context, fileID string) (*FileInfoRawResponse, error)
+	GetFileInfoRawContext(ctx context.Context, fileID string, options ...FileInfoRawOption) (*FileInfoRawResponse, error)
 	GetFileContext(ctx context.Context, downloadURL string, writer io.Writer) error
 
 	// Used to get channel info (for unread counts with xoxp tokens)
