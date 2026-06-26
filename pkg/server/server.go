@@ -41,7 +41,7 @@ const (
 	ToolUsergroupsUpdate            = "usergroups_update"
 	ToolUsergroupsUsersUpdate       = "usergroups_users_update"
 	ToolUsersSearch                 = "users_search"
-	ToolSlackHuddleTranscriptRead   = "slack_huddle_transcript_read"
+	ToolHuddleTranscriptRead        = "huddle_transcript_read"
 )
 
 var ValidToolNames = []string{
@@ -61,7 +61,7 @@ var ValidToolNames = []string{
 	ToolUsergroupsUpdate,
 	ToolUsergroupsUsersUpdate,
 	ToolUsersSearch,
-	ToolSlackHuddleTranscriptRead,
+	ToolHuddleTranscriptRead,
 }
 
 func ValidateEnabledTools(tools []string) error {
@@ -503,17 +503,19 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 		),
 	), filesHandler.SearchFilesAndCanvasesHandler)
 
-	huddleTranscriptsHandler := handler.NewHuddleTranscriptsHandler(provider, logger)
+	if shouldAddTool(ToolHuddleTranscriptRead, enabledTools, "") {
+		huddleTranscriptsHandler := handler.NewHuddleTranscriptsHandler(provider, logger)
 
-	s.AddTool(mcp.NewTool(ToolSlackHuddleTranscriptRead,
-		mcp.WithDescription("Read a Slack huddle transcript file, or resolve a huddle transcript embedded in a Slack AI meeting notes Canvas when metadata exposes the transcript file ID."),
-		mcp.WithTitleAnnotation("Read Slack Huddle Transcript"),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithString("url_or_file_id",
-			mcp.Required(),
-			mcp.Description("Slack huddle transcript file ID (F...) or Slack Canvas/docs URL containing a file ID."),
-		),
-	), huddleTranscriptsHandler.HuddleTranscriptReadHandler)
+		s.AddTool(mcp.NewTool(ToolHuddleTranscriptRead,
+			mcp.WithDescription("Read a Slack huddle transcript file, or resolve a huddle transcript embedded in a Slack AI meeting notes Canvas when metadata exposes the transcript file ID."),
+			mcp.WithTitleAnnotation("Read Slack Huddle Transcript"),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithString("url_or_file_id",
+				mcp.Required(),
+				mcp.Description("Slack huddle transcript file ID (F...) or Slack Canvas/docs URL containing a file ID."),
+			),
+		), huddleTranscriptsHandler.HuddleTranscriptReadHandler)
+	}
 
 	canvasesHandler := handler.NewCanvasesHandler(provider, logger)
 

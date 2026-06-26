@@ -115,7 +115,7 @@ Downloads an attachment by Slack file ID. This write-sensitive data access tool 
 Parameters:
 - `file_id` (string, required): Slack file ID such as `F1234567890`.
 
-### `slack_huddle_transcript_read`
+### `huddle_transcript_read`
 
 Reads a Slack huddle transcript file, or resolves a huddle transcript embedded in Slack AI meeting notes Canvas metadata when Slack exposes the transcript file ID. The tool returns the summary Canvas and transcript body as separate resources and does not treat Canvas metadata-only access as transcript success.
 

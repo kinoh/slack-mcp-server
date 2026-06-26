@@ -47,7 +47,7 @@ func (hh *HuddleTranscriptsHandler) HuddleTranscriptReadHandler(ctx context.Cont
 	hh.logger.Debug("HuddleTranscriptReadHandler called", zap.Any("params", request.Params.Arguments))
 
 	if authenticated, err := auth.IsAuthenticated(ctx, hh.apiProvider.ServerTransport(), hh.logger); !authenticated {
-		hh.logger.Error("Authentication failed for slack_huddle_transcript_read", zap.Error(err))
+		hh.logger.Error("Authentication failed for huddle_transcript_read", zap.Error(err))
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
