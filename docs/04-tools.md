@@ -4,6 +4,15 @@ This page lists the MCP tools exposed by this fork. Tool availability still depe
 
 ## Conversations
 
+Conversation tools return CSV. Existing columns keep their meanings: `Channel`
+is the display value used by earlier clients, `MsgID` is the message timestamp,
+and `ThreadTs` is the thread timestamp when Slack supplies one. `Text` remains a
+flattened, search-oriented value. `DetailText` is Markdown intended for detailed
+reading and preserves message newlines plus attachment sections. `ChannelID`
+contains Slack's stable conversation ID when it is available. Search results also
+include Slack's original `Permalink`; clients should use `ChannelID` and
+`Permalink` directly instead of resolving or reconstructing them from `Channel`.
+
 ### `conversations_history`
 
 Gets messages from a channel or DM.

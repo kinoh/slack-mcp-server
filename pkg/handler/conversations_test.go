@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/korotovsky/slack-mcp-server/pkg/provider"
 	"github.com/korotovsky/slack-mcp-server/pkg/test/util"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -20,7 +21,64 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
+
+func TestConvertMessagesFromSearchPreservesIdentifiersAndDetailText(t *testing.T) {
+	handler := newUnitConversationsHandler(t)
+
+	messages := handler.convertMessagesFromSearch([]slack.SearchMessage{
+		{
+			Channel:   slack.CtxChannel{ID: "C0EXAMPLE1", Name: "テスト用"},
+			Timestamp: "1785477839.896799",
+			Text:      "search excerpt",
+			Permalink: "https://example.slack.com/archives/C0EXAMPLE1/p1785477839896799?thread_ts=1785477800.000001&cid=C0EXAMPLE1",
+			Attachments: []slack.Attachment{
+				{Title: "Notification", Text: "first line\nsecond line"},
+			},
+		},
+	})
+
+	require.Len(t, messages, 1)
+	assert.Equal(t, "#テスト用", messages[0].Channel)
+	assert.Equal(t, "C0EXAMPLE1", messages[0].ChannelID)
+	assert.Equal(t, "1785477839.896799", messages[0].MsgID)
+	assert.Equal(t, "1785477800.000001", messages[0].ThreadTs)
+	assert.Equal(t, "https://example.slack.com/archives/C0EXAMPLE1/p1785477839896799?thread_ts=1785477800.000001&cid=C0EXAMPLE1", messages[0].Permalink)
+	assert.Equal(t, "search excerpt. Title: Notification Text: first line second line", messages[0].Text)
+	assert.Equal(t, "search excerpt\n\n## Notification\n\nfirst line\nsecond line", messages[0].DetailText)
+}
+
+func TestConvertMessagesFromHistoryPreservesOrderAndDetailText(t *testing.T) {
+	handler := newUnitConversationsHandler(t)
+
+	messages := handler.convertMessagesFromHistory([]slack.Message{
+		{Msg: slack.Msg{Timestamp: "1785477800.000001", Text: "parent\nparagraph"}},
+		{
+			Msg: slack.Msg{
+				Timestamp:       "1785477839.896799",
+				ThreadTimestamp: "1785477800.000001",
+				Text:            "reply",
+				Attachments:     []slack.Attachment{{Title: "Details", Text: "line one\nline two"}},
+			},
+		},
+	}, "C0EXAMPLE1", false)
+
+	require.Len(t, messages, 2)
+	assert.Equal(t, "1785477800.000001", messages[0].MsgID)
+	assert.Equal(t, "parent\nparagraph", messages[0].DetailText)
+	assert.Equal(t, "1785477839.896799", messages[1].MsgID)
+	assert.Equal(t, "1785477800.000001", messages[1].ThreadTs)
+	assert.Equal(t, "C0EXAMPLE1", messages[1].ChannelID)
+	assert.Equal(t, "reply\n\n## Details\n\nline one\nline two", messages[1].DetailText)
+}
+
+func newUnitConversationsHandler(t *testing.T) *ConversationsHandler {
+	t.Helper()
+	t.Setenv("SLACK_MCP_XOXP_TOKEN", "demo")
+	logger := zap.NewNop()
+	return NewConversationsHandler(provider.New("stdio", logger), logger)
+}
 
 func TestIntegrationConversations(t *testing.T) {
 	sseKey := uuid.New().String()

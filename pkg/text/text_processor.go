@@ -72,6 +72,149 @@ func AttachmentsTo2CSV(msgText string, attachments []slack.Attachment) string {
 	return prefix + strings.Join(descriptions, ", ")
 }
 
+// MessageToMarkdown returns a display-oriented representation without reusing
+// the flattened search text. Slack mrkdwn is close to Markdown, so the message
+// body is retained and Slack-specific links are converted explicitly.
+func MessageToMarkdown(msgText string, attachments []slack.Attachment) string {
+	var sections []string
+	if body := strings.TrimSpace(SlackMrkdwnToMarkdown(msgText)); body != "" {
+		sections = append(sections, body)
+	}
+
+	var renderedAttachments []string
+	for _, attachment := range attachments {
+		if rendered := AttachmentToMarkdown(attachment); rendered != "" {
+			renderedAttachments = append(renderedAttachments, rendered)
+		}
+	}
+	if len(renderedAttachments) > 0 {
+		sections = append(sections, strings.Join(renderedAttachments, "\n\n---\n\n"))
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+// AttachmentToMarkdown preserves the semantic boundaries Slack exposes for an
+// attachment instead of collapsing every field into a single CSV-oriented line.
+func AttachmentToMarkdown(att slack.Attachment) string {
+	var sections []string
+
+	if att.Title != "" {
+		title := SlackMrkdwnToMarkdown(att.Title)
+		if link := markdownLink(title, att.TitleLink); link != "" {
+			title = link
+		}
+		sections = append(sections, "## "+title)
+	}
+	if att.AuthorName != "" {
+		author := SlackMrkdwnToMarkdown(att.AuthorName)
+		if link := markdownLink(author, att.AuthorLink); link != "" {
+			author = link
+		}
+		sections = append(sections, "**Author:** "+author)
+	}
+	if att.Pretext != "" {
+		sections = append(sections, SlackMrkdwnToMarkdown(att.Pretext))
+	}
+	if att.Text != "" {
+		sections = append(sections, SlackMrkdwnToMarkdown(att.Text))
+	}
+	for _, field := range att.Fields {
+		var fieldParts []string
+		if field.Title != "" {
+			fieldParts = append(fieldParts, "**"+SlackMrkdwnToMarkdown(field.Title)+"**")
+		}
+		if field.Value != "" {
+			fieldParts = append(fieldParts, SlackMrkdwnToMarkdown(field.Value))
+		}
+		if len(fieldParts) > 0 {
+			sections = append(sections, strings.Join(fieldParts, "\n\n"))
+		}
+	}
+	if att.Footer != "" {
+		footer := SlackMrkdwnToMarkdown(att.Footer)
+		if att.Ts != "" {
+			rawTimestamp := string(att.Ts)
+			if timestamp, err := TimestampToIsoRFC3339(rawTimestamp + ".000000"); err == nil {
+				footer += " @ " + timestamp
+			} else {
+				footer += " @ " + rawTimestamp
+			}
+		}
+		sections = append(sections, footer)
+	}
+
+	return strings.TrimSpace(strings.Join(sections, "\n\n"))
+}
+
+var (
+	slackURLLinkRegex     = regexp.MustCompile(`<((?:https?://|mailto:)[^>|]+)(?:\|([^>]+))?>`)
+	slackChannelLinkRegex = regexp.MustCompile(`<#([^>|]+)(?:\|([^>]+))?>`)
+	slackUserLinkRegex    = regexp.MustCompile(`<@([^>|]+)(?:\|([^>]+))?>`)
+	slackSpecialLinkRegex = regexp.MustCompile(`<!([^>|]+)(?:\|([^>]+))?>`)
+)
+
+// SlackMrkdwnToMarkdown retains newlines, lists, quotes, and code while making
+// Slack-specific links and mentions readable by a standard Markdown renderer.
+func SlackMrkdwnToMarkdown(value string) string {
+	value = slackURLLinkRegex.ReplaceAllStringFunc(value, func(match string) string {
+		parts := slackURLLinkRegex.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		if len(parts) < 3 || parts[2] == "" {
+			return parts[1]
+		}
+		return markdownLink(parts[2], parts[1])
+	})
+	value = slackChannelLinkRegex.ReplaceAllStringFunc(value, func(match string) string {
+		parts := slackChannelLinkRegex.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		name := parts[1]
+		if len(parts) == 3 && parts[2] != "" {
+			name = parts[2]
+		}
+		return "#" + strings.TrimPrefix(name, "#")
+	})
+	value = slackUserLinkRegex.ReplaceAllStringFunc(value, func(match string) string {
+		parts := slackUserLinkRegex.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		name := parts[1]
+		if len(parts) == 3 && parts[2] != "" {
+			name = parts[2]
+		}
+		return "@" + strings.TrimPrefix(name, "@")
+	})
+	value = slackSpecialLinkRegex.ReplaceAllStringFunc(value, func(match string) string {
+		parts := slackSpecialLinkRegex.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		name := parts[1]
+		if len(parts) == 3 && parts[2] != "" {
+			name = parts[2]
+		}
+		return "@" + strings.TrimPrefix(name, "@")
+	})
+	return value
+}
+
+func markdownLink(label, rawURL string) string {
+	if label == "" || rawURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "mailto") {
+		return ""
+	}
+	escapedLabel := strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`).Replace(label)
+	return fmt.Sprintf("[%s](%s)", escapedLabel, rawURL)
+}
+
 func IsUnfurlingEnabled(text string, opt string, logger *zap.Logger) bool {
 	if opt == "" || opt == "no" || opt == "false" || opt == "0" {
 		return false

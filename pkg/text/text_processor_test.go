@@ -2,7 +2,46 @@ package text
 
 import (
 	"testing"
+
+	"github.com/slack-go/slack"
 )
+
+func TestMessageToMarkdownPreservesReadableStructure(t *testing.T) {
+	message := "Summary\n\n* item one\n* item two\n\n> quoted\n\n```go\nfmt.Println(\"ok\")\n```"
+	attachments := []slack.Attachment{
+		{
+			Title:     "Pull request updated",
+			TitleLink: "https://github.example/pull/42",
+			Pretext:   "Review requested",
+			Text:      "First paragraph\n\nSecond paragraph with <https://github.example/issues/42|issue link>",
+			Fields: []slack.AttachmentField{
+				{Title: "Status", Value: "Ready"},
+			},
+			Footer: "GitHub",
+		},
+	}
+
+	got := MessageToMarkdown(message, attachments)
+	want := "Summary\n\n* item one\n* item two\n\n> quoted\n\n```go\nfmt.Println(\"ok\")\n```\n\n## [Pull request updated](https://github.example/pull/42)\n\nReview requested\n\nFirst paragraph\n\nSecond paragraph with [issue link](https://github.example/issues/42)\n\n**Status**\n\nReady\n\nGitHub"
+
+	if got != want {
+		t.Fatalf("MessageToMarkdown() = %q, want %q", got, want)
+	}
+}
+
+func TestMessageToMarkdownSeparatesAttachments(t *testing.T) {
+	attachments := []slack.Attachment{
+		{Title: "First", Text: "First body"},
+		{Title: "Second", Text: "Second body"},
+	}
+
+	got := MessageToMarkdown("", attachments)
+	want := "## First\n\nFirst body\n\n---\n\n## Second\n\nSecond body"
+
+	if got != want {
+		t.Fatalf("MessageToMarkdown() = %q, want %q", got, want)
+	}
+}
 
 func TestIsUnfurlingEnabled(t *testing.T) {
 	tests := []struct {

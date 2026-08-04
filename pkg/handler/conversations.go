@@ -57,6 +57,9 @@ type Message struct {
 	FileCount     int    `json:"fileCount,omitempty"`
 	AttachmentIDs string `json:"attachmentIDs,omitempty"`
 	HasMedia      bool   `json:"hasMedia,omitempty"`
+	ChannelID     string `json:"sourceChannelID,omitempty"`
+	Permalink     string `json:"permalink,omitempty"`
+	DetailText    string `json:"detailText,omitempty"`
 	Cursor        string `json:"cursor"`
 }
 
@@ -1545,6 +1548,8 @@ func (ch *ConversationsHandler) convertMessagesFromHistory(slackMessages []slack
 			FileCount:     fileCount,
 			AttachmentIDs: attachmentIDsStr,
 			HasMedia:      hasMedia,
+			ChannelID:     conversationID(channel),
+			DetailText:    text.MessageToMarkdown(msg.Text, msg.Attachments),
 		})
 	}
 
@@ -1573,7 +1578,12 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 			warn = true
 		}
 
-		threadTs, _ := extractThreadTS(msg.Permalink)
+		threadTs, err := extractThreadTS(msg.Permalink)
+		if err != nil {
+			ch.logger.Warn("Failed to extract thread timestamp from search permalink",
+				zap.String("channel_id", msg.Channel.ID),
+				zap.Error(err))
+		}
 
 		timestamp, err := text.TimestampToIsoRFC3339(msg.Timestamp)
 		if err != nil {
@@ -1586,16 +1596,19 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 		hasMedia := hasImageBlocks(msg.Blocks)
 
 		messages = append(messages, Message{
-			MsgID:     msg.Timestamp,
-			UserID:    msg.User,
-			UserName:  userName,
-			RealName:  realName,
-			Text:      text.ProcessText(msgText),
-			Channel:   fmt.Sprintf("#%s", msg.Channel.Name),
-			ThreadTs:  threadTs,
-			Time:      timestamp,
-			Reactions: "",
-			HasMedia:  hasMedia,
+			MsgID:      msg.Timestamp,
+			UserID:     msg.User,
+			UserName:   userName,
+			RealName:   realName,
+			Text:       text.ProcessText(msgText),
+			Channel:    fmt.Sprintf("#%s", msg.Channel.Name),
+			ThreadTs:   threadTs,
+			Time:       timestamp,
+			Reactions:  "",
+			HasMedia:   hasMedia,
+			ChannelID:  msg.Channel.ID,
+			Permalink:  msg.Permalink,
+			DetailText: text.MessageToMarkdown(msg.Text, msg.Attachments),
 		})
 	}
 
@@ -1608,6 +1621,23 @@ func (ch *ConversationsHandler) convertMessagesFromSearch(slackMessages []slack.
 		}
 	}
 	return messages
+}
+
+func conversationID(value string) string {
+	if len(value) < 2 {
+		return ""
+	}
+	switch value[0] {
+	case 'C', 'G', 'D':
+		for _, char := range value[1:] {
+			if (char < 'A' || char > 'Z') && (char < '0' || char > '9') {
+				return ""
+			}
+		}
+		return value
+	default:
+		return ""
+	}
 }
 
 func (ch *ConversationsHandler) parseParamsToolConversations(ctx context.Context, request mcp.CallToolRequest) (*conversationParams, error) {
