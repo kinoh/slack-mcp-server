@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/korotovsky/slack-mcp-server/pkg/provider"
 	"github.com/korotovsky/slack-mcp-server/pkg/test/util"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
@@ -71,6 +72,38 @@ func TestConvertMessagesFromHistoryPreservesOrderAndDetailText(t *testing.T) {
 	assert.Equal(t, "1785477800.000001", messages[1].ThreadTs)
 	assert.Equal(t, "C0EXAMPLE1", messages[1].ChannelID)
 	assert.Equal(t, "reply\n\n## Details\n\nline one\nline two", messages[1].DetailText)
+}
+
+func TestMarshalMessagesToCSVIncludesStableDetailContract(t *testing.T) {
+	result, err := marshalMessagesToCSV([]Message{
+		{
+			MsgID:      "1785000000.123456",
+			Channel:    "#表示名",
+			ThreadTs:   "1784999999.654321",
+			Text:       "flat excerpt",
+			ChannelID:  "C0EXAMPLE1",
+			Permalink:  "https://example.slack.com/archives/C0EXAMPLE1/p1785000000123456",
+			DetailText: "first paragraph\n\nsecond paragraph",
+			Cursor:     "next-cursor",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Content, 1)
+	content, ok := result.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+
+	records, err := csv.NewReader(strings.NewReader(content.Text)).ReadAll()
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	assert.Equal(t, []string{
+		"MsgID", "UserID", "UserName", "RealName", "Channel", "ThreadTs", "Text", "Time",
+		"Reactions", "BotName", "FileCount", "AttachmentIDs", "HasMedia", "ChannelID", "Permalink",
+		"DetailText", "Cursor",
+	}, records[0])
+	assert.Equal(t, "C0EXAMPLE1", records[1][13])
+	assert.Equal(t, "https://example.slack.com/archives/C0EXAMPLE1/p1785000000123456", records[1][14])
+	assert.Equal(t, "first paragraph\n\nsecond paragraph", records[1][15])
+	assert.Equal(t, "next-cursor", records[1][16])
 }
 
 func newUnitConversationsHandler(t *testing.T) *ConversationsHandler {
